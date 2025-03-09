@@ -16,7 +16,7 @@ import logging
 import sys
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # 添加父目录到路径，以便能导入agent包中的模块
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -122,67 +122,108 @@ def is_test_task(task):
     # 测试任务通常使用特定的测试仓库URL
     return 'test/repo' in repo_url.lower() or 'test-repo' in repo_url.lower() or 'security-vulnerabilities' in repo_url.lower()
 
-def cleanup_all_test_data(dry_run=False):
+def parse_args():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(description='清理数据库中的测试数据')
+    parser.add_argument('--dry-run', action='store_true', 
+                        help='只显示将要删除的内容，不实际删除')
+    parser.add_argument('--agents-only', action='store_true',
+                        help='只清理测试代理数据')
+    parser.add_argument('--tasks-only', action='store_true',
+                        help='只清理测试任务数据')
+    parser.add_argument('--older-than', type=int, default=0, 
+                        help='只清理早于指定天数的数据 (例如：--older-than 7 清理7天前的数据)')
+    return parser.parse_args()
+
+def is_older_than_days(date_str, days):
+    """判断日期是否早于指定天数"""
+    if not date_str or not isinstance(date_str, str):
+        return False
+    
+    try:
+        # 处理ISO格式的日期时间字符串
+        date_str = date_str.replace('Z', '+00:00')
+        date_obj = datetime.fromisoformat(date_str)
+        
+        # 计算指定天数前的日期
+        cutoff_date = datetime.now() - timedelta(days=days)
+        
+        return date_obj < cutoff_date
+    except (ValueError, TypeError):
+        return False
+
+def cleanup_all_test_data(dry_run=False, agents_only=False, tasks_only=False, older_than_days=0):
     """清理所有测试数据"""
     logger.info(f"{'[DRY RUN] ' if dry_run else ''}开始清理测试数据...")
     
     # 获取所有代理和任务
-    agents = get_all_agents()
-    tasks = get_all_tasks()
+    agents = [] if tasks_only else get_all_agents()
+    tasks = [] if agents_only else get_all_tasks()
     
     logger.info(f"获取到 {len(agents)} 个代理")
     logger.info(f"获取到 {len(tasks)} 个任务")
     
     # 识别测试代理和与之相关的任务
     test_agents = [agent for agent in agents if is_test_agent(agent)]
+    
+    # 如果指定了older_than_days，过滤出早于指定天数的代理
+    if older_than_days > 0:
+        test_agents = [agent for agent in test_agents if is_older_than_days(agent.get('created_at'), older_than_days)]
+    
     test_agent_ids = [agent['id'] for agent in test_agents]
     
     # 识别测试任务（包括基于URL的和与测试代理相关的）
     test_tasks = [task for task in tasks if is_test_task(task) or task.get('agent_id') in test_agent_ids]
+    
+    # 如果指定了older_than_days，过滤出早于指定天数的任务
+    if older_than_days > 0:
+        test_tasks = [task for task in test_tasks if is_older_than_days(task.get('created_at'), older_than_days)]
     
     logger.info(f"识别到 {len(test_agents)} 个测试代理")
     logger.info(f"识别到 {len(test_tasks)} 个测试任务")
     
     if dry_run:
         # 仅展示将要删除的内容，不实际删除
-        logger.info("[DRY RUN] 将要删除的测试代理:")
-        for agent in test_agents:
-            logger.info(f"  - {agent.get('name', 'Unknown')} (ID: {agent.get('id', 'Unknown')})")
+        if not tasks_only:
+            logger.info("[DRY RUN] 将要删除的测试代理:")
+            for agent in test_agents:
+                logger.info(f"  - {agent.get('name', 'Unknown')} (ID: {agent.get('id', 'Unknown')})")
         
-        logger.info("[DRY RUN] 将要删除的测试任务:")
-        for task in test_tasks:
-            logger.info(f"  - {task.get('repository_url', 'Unknown')} (ID: {task.get('id', 'Unknown')})")
+        if not agents_only:
+            logger.info("[DRY RUN] 将要删除的测试任务:")
+            for task in test_tasks:
+                logger.info(f"  - {task.get('repository_url', 'Unknown')} (ID: {task.get('id', 'Unknown')})")
         
         logger.info("[DRY RUN] 操作完成。实际运行时将删除这些数据。")
         return
     
     # 先删除任务，因为任务可能引用代理
     deleted_tasks = 0
-    for task in test_tasks:
-        task_id = task.get('id')
-        if task_id and delete_task(task_id):
-            deleted_tasks += 1
-            # 短暂暂停，避免过多的请求
-            time.sleep(0.1)
+    if not agents_only:
+        for task in test_tasks:
+            task_id = task.get('id')
+            if task_id and delete_task(task_id):
+                deleted_tasks += 1
+                # 短暂暂停，避免过多的请求
+                time.sleep(0.1)
     
     # 然后删除代理
     deleted_agents = 0
-    for agent in test_agents:
-        agent_id = agent.get('id')
-        if agent_id and delete_agent(agent_id):
-            deleted_agents += 1
-            # 短暂暂停，避免过多的请求
-            time.sleep(0.1)
+    if not tasks_only:
+        for agent in test_agents:
+            agent_id = agent.get('id')
+            if agent_id and delete_agent(agent_id):
+                deleted_agents += 1
+                # 短暂暂停，避免过多的请求
+                time.sleep(0.1)
     
     logger.info(f"清理完成。删除了 {deleted_tasks} 个测试任务和 {deleted_agents} 个测试代理。")
 
-def parse_args():
-    """解析命令行参数"""
-    parser = argparse.ArgumentParser(description='清理数据库中的测试数据')
-    parser.add_argument('--dry-run', action='store_true', 
-                        help='只显示将要删除的内容，不实际删除')
-    return parser.parse_args()
-
 if __name__ == "__main__":
     args = parse_args()
-    cleanup_all_test_data(dry_run=args.dry_run) 
+    cleanup_all_test_data(
+        dry_run=args.dry_run, 
+        agents_only=args.agents_only, 
+        tasks_only=args.tasks_only,
+        older_than_days=args.older_than
+    ) 
