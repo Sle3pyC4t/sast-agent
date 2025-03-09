@@ -1,0 +1,59 @@
+# Python相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.env
+
+# 日志文件
+logs/
+*.log
+
+# IDE相关
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 本地配置文件
+config.local.yaml
+*.local.yaml
+*.local.yml
+
+# 测试覆盖率报告
+.coverage
+htmlcov/
+.pytest_cache/
+
+# 敏感信息文件
+*.pem
+*.key
+*credentials*
+
+# 临时文件
+.tmp/
+tmp/
+.temp/
+temp/ 

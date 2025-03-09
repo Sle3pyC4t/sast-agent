@@ -1,0 +1,5 @@
+agent_id: 99ef521d-b91f-4e59-9972-8ced2bf6d516
+agent_name: agent-99ef521d
+console_url: https://sast-console.vercel.app
+default_timeout: 3600
+registered: true
