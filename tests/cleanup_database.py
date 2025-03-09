@@ -120,7 +120,12 @@ def is_test_task(task):
     
     repo_url = task.get('repository_url', '')
     # 测试任务通常使用特定的测试仓库URL
-    return 'test/repo' in repo_url.lower() or 'test-repo' in repo_url.lower() or 'security-vulnerabilities' in repo_url.lower()
+    return ('test/repo' in repo_url.lower() or 
+            'test-repo' in repo_url.lower() or 
+            'security-vulnerabilities' in repo_url.lower() or
+            'nodegoat' in repo_url.lower() or
+            'test' in repo_url.lower() or
+            'sast-console' in repo_url.lower())
 
 def parse_args():
     """解析命令行参数"""
